@@ -35,6 +35,7 @@ export default defineConfig({
           title: "Aloso's Blog",
           metrics: { readingTime: true },
           navigation: 'none',
+          postCount: 15,
         }),
       ],
       head: [
