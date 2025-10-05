@@ -1,0 +1,26 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+---
+
+<StarlightPage frontmatter={{ title: 'About', tableOfContents: false }} hasSidebar={false}>
+  <p>
+    Hi! I’m <em>Ludwig</em>. I am a software engineer living in Germany. On this blog I write about many things, mostly about Rust.
+  </p>
+
+  <p>
+    You can reach out to me via <a href="mailto:ludwig.stecher@gmx.de">email</a>.
+  </p>
+
+  <h2>License</h2>
+  <p>
+    The contents of this blog are licensed under the
+    <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International</a> license.
+  </p>
+
+  <h2>Donate</h2>
+  <p>
+    I maintain several open-source projects, most notably <a href="https://pomsky-lang.org">Pomsky</a>, in my spare time. If you'd like to support my work, check out
+    <a href="https://github.com/sponsors/Aloso">GitHub sponsors</a>.
+  </p>
+
+</StarlightPage>

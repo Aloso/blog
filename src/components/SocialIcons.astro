@@ -1,0 +1,61 @@
+---
+import { Icon } from '@astrojs/starlight/components';
+
+const links = [
+	{ platform: 'github', url: 'https://github.com/Aloso', label: 'GitHub' },
+	{ platform: 'rss', url: '/blog/rss.xml', label: 'RSS Feed' },
+] as const
+---
+
+<a class="title-link" href="https://pomsky-lang.org">Pomsky</a>
+<a class="title-link" href="/contact">About</a>
+
+<hr class="separator" />
+
+{links.map(({ platform, label, url }) => (
+  <a href={url} rel="me" class="sl-flex">
+    <span class="sr-only">{label}</span>
+    <Icon name={platform} />
+  </a>
+))}
+
+<style>
+  .separator {
+    margin: -1rem 0.33rem;
+    height: 30px;
+    border: none;
+    border-inline-end: 1px solid var(--sl-color-gray-5);
+  }
+
+	a {
+		color: var(--sl-color-text-accent);
+		padding: 0.5em;
+		margin: -0.5em;
+    text-decoration: none;
+	}
+	a:hover {
+		opacity: 0.66;
+	}
+
+  .title-link {
+    display: inline-block;
+    padding: 0.5rem 0;
+    margin: -1rem 0;
+    font-weight: 500;
+    font-size: 1.1rem;
+    color: inherit;
+  }
+
+  @media (max-width: 1000px) {
+    .title-link, .separator {
+      display: none;
+    }
+  }
+
+  @media (max-width: 800px) {
+    .title-link {
+      display: block;
+      font-size: 1rem;
+    }
+  }
+</style>

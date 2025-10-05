@@ -1,0 +1,7 @@
+---
+const { columns } = Astro.props;
+---
+
+<div class="markdown-grid" style={`--columns: ${columns}`}>
+    <slot />
+</div>
