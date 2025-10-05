@@ -1,6 +1,9 @@
 :root {
   --sl-font: Inter, sans-serif;
   --sl-font-mono: JetBrains Mono, Consolas, monospace;
+  --sl-color-accent: #c35800;
+  --sl-color-accent-low: #f2cebc;
+  --sl-color-accent-high: #6a2c00;
   font-size: 125%;
 }
 
@@ -18,24 +21,9 @@
 
 :root[data-theme='dark'] {
   --sl-color-text: hsl(210, 5%, 87%);
-}
-
-header h2 a {
-  color: #a94600;
-}
-header h2 a:hover {
-  text-decoration: underline;
-}
-[data-theme='dark'] header h2 a {
-  color: #ffda73;
-}
-
-em {
-  color: #a94600;
-}
-
-[data-theme='dark'] em {
-  color: #ffda73;
+  --sl-color-accent: #d6a100;
+  --sl-color-accent-low: #582300;
+  --sl-color-accent-high: #ffda73;
 }
 
 .markdown-grid {
