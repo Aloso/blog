@@ -1,6 +1,7 @@
 import { defineConfig, passthroughImageService } from 'astro/config'
 import starlight from '@astrojs/starlight'
 import starlightBlog from 'starlight-blog'
+import { koka } from './src/plugins/grammars/koka'
 
 function meta(attrs: Record<string, any>) {
   return { tag: 'meta', attrs } as const
@@ -25,6 +26,9 @@ export default defineConfig({
   },
   image: {
     service: passthroughImageService(),
+  },
+  markdown: {
+    syntaxHighlight: 'shiki',
   },
   integrations: [
     starlight({
@@ -56,6 +60,9 @@ export default defineConfig({
       customCss: ['./src/styles/global.css'],
       expressiveCode: {
         themes: ['dark-plus', 'light-plus'],
+        shiki: {
+          langs: [koka],
+        },
       },
       components: {
         SocialIcons: './src/components/SocialIcons.astro',

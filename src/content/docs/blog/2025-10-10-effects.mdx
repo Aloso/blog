@@ -1,0 +1,231 @@
+---
+title: Effects in Rust (and Koka)
+date: 2025-10-10
+tags: [Language Design]
+---
+
+What is an effect system? According to Wikipedia, it is a formal system that describes the computational effects of computer programs, such as _side effects_. It is also an extension of a type system, and allows you to statically verify that your program is sound with regard to effects.
+
+If you want to fully understand this concept, I recommend you to learn [Koka](https://koka-lang.github.io/). It is a beautiful language with a powerful, yet easy to understand effect system. This blog post includes Koka snippets, but they should be easy to understand without prior knowledge.
+
+{/* excerpt */}
+
+## Side effects in Rust
+
+The most common kind of effect is a _side effect_. That's when a function changes state that is observable outside of the function, other than through the return value. For example, printing text to `stdout` is a side effect, and so is mutating a global variable.
+
+Despite being imperative at its core, Rust has borrowed many ideas from functional programming. This is not just because FP is 'cool', but because Rust aims to make your code more reliable, maintainable, testable and easy to understand. In particular, programmers praise the fact that Rust can prove the absence of data races in multi-threaded code, which is notoriously difficult in other imperative languages. Rust achieves this through its _ownership model_, which limits how and when data can be mutated, and this is encoded in the type system:
+
+```rust 'mut'
+fn report_items(items: Vec<&mut Item>) {
+    for item in items {
+        println!("{item}");
+        item.reported = true;
+    }
+}
+```
+
+One could argue that the ownership model is an **effect system** (albeit an incomplete one), in which `&mut` declares a potential side effect by mutation. Side effects _not_ tracked by Rust's type system are
+
+- Memory allocation
+- Input/Output (e.g. networking, file system access)
+- Mutation through interior mutable types or raw pointers
+
+This is by design: Rust may be dogmatic about safety, but it is much more pragmatic when it comes to programming idioms; it is not a purely functional language.
+
+## Effects that modify control flow
+
+There's another kind of effect that can _suspend_ and potentially _resume_ a function, which includes
+
+- panic
+- await
+- yield
+
+You might be wondering if I forgot the `?` operator. We will get to that in a moment.
+
+### Panics (exceptions)
+
+Rust doesn't have exceptions, but panics are quite similar: They bubble up, unwinding the call stack and calling destructors in the process, until they're caught (unless you set `panic=abort`). Whereas exceptions are typically caught with a `try`/`catch` construct, Rust's panics are caught with the `catch_unwind` function.
+
+The main difference between exceptions and panics is that panics are not the default choice for error handling. They are intended only for errors that the program cannot recover from, and should only be caught in order to log or report them. Instead, the `Result` type is used for typical error handling.
+
+This means that errors are not effects in Rust. `Result::Err(_)` is returned as a value, which makes it indistinguishable from a successful return in the eyes of the type system. Similarly, `?` is not an effect, as it merely desugars to an early `return` statement. Making errors a part of the type system ensures that all possible errors are handled, otherwise your code doesn't compile.
+
+Now, let's take a look at how exceptions are implemented in Koka. Koka is a functional programming language with a simple yet powerful effect system. Rather than having many forms of control flow built in, it provides a few basic building blocks for implementing all kinds of control flow:
+
+```koka
+effect throw
+  ctl throw(msg : string) : a
+
+fun safe-divide(x : int, y : int) : throw int
+  if y == 0 then throw("div-by-zero")
+  else x / y
+```
+
+What's going on here? We declare an effect `throw` that accepts a string and returns an arbitrary type `a` (in Rust, we would use the `!` type here). This effect is called in the `safe-divide` function, and becomes part of its type signature: `throw int` means that this function returns `int` and has the effect `throw`. When the function is called, the effect must be either handled, or propagated:
+
+```koka
+fun propagate() : throw int
+  safe-divide(4, 0)
+
+fun handle-effect() : int
+  with handler
+    ctl throw(msg) 42
+  propagate()
+```
+
+Now here comes the interesting part: `handle-effect` calls `propagate`, which calls `safe-divide`, which invokes the `throw` effect. The `handler` expression, well, handles the effect by returning 42. In Rust, this would be written as
+
+```rust
+fn handle_effect() -> i32 {
+    std::panic::catch_unwind(propagate)
+        .unwrap_or_else(|_| 42)
+}
+```
+
+When an effect is invoked in Koka, the current execution is suspended. The effect handler may resume the execution, but it doesn't have to.
+
+### Await and yield
+
+Generators are an unstable feature in Rust that makes it easy to write iterators:
+
+```rust
+let generator = gen {
+    yield 5;
+    yield 3;
+    yield 1;
+};
+
+for n in generator {
+    println!("yielded {n}");
+}
+```
+
+The interesting part is the `yield` keyword. It emits a value and pauses the generator, which is then resumed once the iterator's `next()` method is called. In Koka, this could be written like this:
+
+```koka 'resume()'
+effect yield
+  ctl yield(item : t) : ()
+
+fun generator() : yield ()
+  yield(5)
+  yield(3)
+  yield(1)
+
+fun main()
+  with handler
+    ctl yield(item)
+      println("yielded " ++ item.show)
+      resume()
+  generator()
+```
+
+This looks very similar to the exception handling example, with one important difference: After handling the `yield` effect, we call `resume()`, which continues the execution of the generator.
+
+Async/await is similar, but more powerful. An `await` expression pauses the execution, but it also produces a new value:
+
+```koka /(?<=: )t/
+effect await
+  ctl await(fut : future<t>) : t
+```
+
+This value can be provided to the `resume()` function when handling the `await` effect. I won't attempt to implement this, but it is most certainly possible.
+
+## Effect Polymorphism
+
+What makes effect systems so powerful is their ability to be polymorphic over effects. _Polymorphic_ means having several shapes or forms. For example, Koka allows you to define a function
+
+```koka /\be\b/
+fun map(xs : list<a>, f : a -> e b) : e list<b>
+```
+
+Where `e` is a generic effect, or any number of effects. This higher-order function accepts functions with arbitrary effects and simply propagates them.
+
+The same is not possible in Rust: To support `await`, the function must be async, and to support `yield`, it must return a generator. However, if you decide to support `await` and make the function async, it cannot be used synchronously anymore, whether or not `await` is actually used. For this reason, some libraries reluctantly offer two APIs: one synchronous and one asynchronous.
+
+There's another case where Rust's lack of effect polymorphism causes problems: sometimes we want to produce an error from a higher-order function, but the function doesn't support this. This has led to a proliferation of functions such as `try_map`, `try_find`, `try_fold` and `try_reduce`. As you might recall, errors in Rust aren't effects because they are returned as values. This is generally a good approach because it makes errors subject to the type system. However, it can be difficult to work with at times due to the inability to be polymorphic over fallible and non-fallible functions.
+
+### Keyword Generics
+
+In 2022, the Rust project announced the [Keyword Generics Initiative](https://blog.rust-lang.org/inside-rust/2022/07/27/keyword-generics/), which aims to add support for effect polymorphism. In particular, the initiative wants functions (and traits) to be generic over their async-ness, const-ness, fallibility, and perhaps the mutability of `self`. I previously believed that the initiative had been abandoned, given that no comprehensive proposal was created. However, there is still sporadic activity in tracking issues.
+
+### Constness
+
+What's the deal with `const`? Since it doesn't produce side effects or change control flow, `const` cannot be considered an effect. It is actually the opposite: The absenceof `const` – let's call it `runtime` – is an effect. Pure functions can _in theory_ always be made const, whereas functions with side effects other than panics always require the runtime effect; they cannot be const.
+
+There is a nice symmetry between `runtime` and `async`: Both effects are "infectious", meaning an async function cannot be called from an synchronous function, just as a runtime function cannot be called from a const function. The other direction works: A synchronous function can be called from an async function with no problem. The same goes for const functions.
+
+Right now, the Rust project is working hard to make traits usable in const functions. This requires some form of effect polymorphism:
+
+```rust
+// currently proposed syntax
+
+[const] trait Default {
+    fn default() -> Self;
+}
+
+struct Thing<T>(T);
+
+impl<T: [const] Default> const Default for Thing<T> {
+    fn default() -> Self { Self(T::default()) }
+}
+
+impl const Default for () {
+    fn default() {}
+}
+```
+
+The `[const]` modifier means "this might be const, or it might not". Let's see what this would look like in Koka. Since Koka doesn't have traits or type classes, we use _implicit parameters_ (denoted by `?`) instead:
+
+```koka /\be\b/
+struct thing<a>
+  value : a
+
+fun thing/default(?default : () -> e a) : e thing<a>
+  Thing(default())
+
+fun unit/default()
+  ()
+```
+
+This is more powerful, since it works with any effect – not just `runtime`. Other than that, it does the same thing as the Rust example. The `?` means that the `default` parameter can be omitted and Koka will find the correct function automatically.
+
+## Encoding side effects in the type system
+
+Many effects can already be expressed in Rust. An effect that does not suspend execution (i.e. one that immediately resumes) is equivalent to a function argument.
+
+```koka
+fun count-lines(path : path) : <exn,fsys> int
+  read-text-file(path).sep/split("\n").length
+```
+
+This can be written in Rust as
+
+```rust
+fn count_lines(
+    path: &Path,
+    read_text_file: impl Fn(&Path) -> io::Result<String>,
+) -> io::Result<usize> {
+    Ok(read_text_file(path)?.split("\n").count())
+}
+```
+
+The side effect (file I/O) is now encoded in the function signature. This has several advantages: it makes reasoning about the program easier and simplifies unit testing. To make it scale better, a trait can be used:
+
+```rust
+trait Fsys {
+    fn read_text_file(&self, path: &Path) -> io::Result<String>;
+}
+
+fn count_lines(path: &Path, fsys: impl Fsys) -> io::Result<usize> {
+    Ok(fsys.read_text_file(path)?.split("\n").count())
+}
+```
+
+The main disadvantage is that this parameter has to be explicitly passed down from `main` to every function that accesses the file system. If a function has multiple effects, this can become tedious. However, having too many functions with side effects is an anti-pattern, and making them explicit can help you to refactor and improve your code.
+
+## Conclusion
+
+[Effect.ts](https://effect.website/) is a new and popular framework enabling functional programming, including an effect system, in TypeScript. This demonstrates the growing demand for type and effect safety within the software engineering industry.
+
+Unfortunately, a fully general effect system like Koka's most likely cannot be added to Rust without major breaking changes. To me, the proposed keyword generics feel like a compromise rather than a [shiny future](https://github.com/rust-lang/rust-project-goals/blob/main/src/2024h2/const-traits.md#the-shiny-future-we-are-working-towards), but they are still a big improvement over the status quo.
