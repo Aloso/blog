@@ -40,8 +40,7 @@ There's another kind of effect that can _suspend_ and potentially _resume_ a fun
 - panic
 - await
 - yield
-
-You might be wondering if I forgot the `?` operator. We will get to that in a moment.
+- ? [^1]
 
 ### Panics (exceptions)
 
@@ -49,7 +48,7 @@ Rust doesn't have exceptions, but panics are quite similar: They bubble up, unwi
 
 The main difference between exceptions and panics is that panics are not the default choice for error handling. They are intended only for errors that the program cannot recover from, and should only be caught in order to log or report them. Instead, the `Result` type is used for typical error handling.
 
-This means that errors are not effects in Rust. `Result::Err(_)` is returned as a value, which makes it indistinguishable from a successful return in the eyes of the type system. Similarly, `?` is not an effect, as it merely desugars to an early `return` statement. Making errors a part of the type system ensures that all possible errors are handled, otherwise your code doesn't compile.
+This means that errors are not side effects in Rust. `Result::Err(_)` is returned as a value, which makes it indistinguishable from a successful return in the eyes of the type system. Similarly, `?` is not a side effect, as it merely desugars to an early `return` statement. But errors are _algebraic effects_, which are part of the type system. This ensures that all possible errors are handled, otherwise your code doesn't compile.
 
 Now, let's take a look at how exceptions are implemented in Koka. Koka is a functional programming language with a simple yet powerful effect system. Rather than having many forms of control flow built in, it provides a few basic building blocks for implementing all kinds of control flow:
 
@@ -147,7 +146,7 @@ Where `e` is a generic effect, or any number of effects. This higher-order funct
 
 The same is not possible in Rust: To support `await`, the function must be async, and to support `yield`, it must return a generator. However, if you decide to support `await` and make the function async, it cannot be used synchronously anymore, whether or not `await` is actually used. For this reason, some libraries reluctantly offer two APIs: one synchronous and one asynchronous.
 
-There's another case where Rust's lack of effect polymorphism causes problems: sometimes we want to produce an error from a higher-order function, but the function doesn't support this. This has led to a proliferation of functions such as `try_map`, `try_find`, `try_fold` and `try_reduce`. As you might recall, errors in Rust aren't effects because they are returned as values. This is generally a good approach because it makes errors subject to the type system. However, it can be difficult to work with at times due to the inability to be polymorphic over fallible and non-fallible functions.
+There's another case where Rust's lack of effect polymorphism causes problems: sometimes we want to produce an error from a higher-order function, but the function doesn't support this. This has led to a proliferation of functions such as `try_map`, `try_find`, `try_fold` and `try_reduce`. As you might recall, errors in Rust aren't side effects because they are returned as values. This is generally a good approach because it makes errors subject to the type system. However, it can be difficult to work with at times due to the inability to be polymorphic over fallible and non-fallible functions.
 
 ### Keyword Generics
 
@@ -235,3 +234,5 @@ The main disadvantage is that this parameter has to be explicitly passed down fr
 Unfortunately, a fully general effect system like Koka's most likely cannot be added to Rust without major breaking changes. To me, the proposed keyword generics feel like a compromise rather than a [shiny future](https://github.com/rust-lang/rust-project-goals/blob/main/src/2024h2/const-traits.md#the-shiny-future-we-are-working-towards), but they are still a big improvement over the status quo. In the meantime, you can use parameters to make side effects explicit. And if you haven't already, [take a look at Koka](https://koka-lang.github.io/koka/doc/index.html).
 
 Discuss this blog post [on Reddit](https://www.reddit.com/r/rust/comments/1o2lvez/effects_in_rust_and_koka/).
+
+[^1]: I previously claimed that Rust's errors aren't effects, which is only partially correct: Errors aren't _side effects_, as they are part of the return type, but they are algebraic effects.
