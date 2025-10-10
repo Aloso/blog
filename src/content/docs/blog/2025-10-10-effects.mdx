@@ -151,7 +151,7 @@ In 2022, the Rust project announced the [Keyword Generics Initiative](https://bl
 
 ### Constness
 
-What's the deal with `const`? Since it doesn't produce side effects or change control flow, `const` cannot be considered an effect. It is actually the opposite: The absenceof `const` – let's call it `runtime` – is an effect. Pure functions can _in theory_ always be made const, whereas functions with side effects other than panics always require the runtime effect; they cannot be const.
+What's the deal with `const`? Since it doesn't produce side effects or change control flow, `const` cannot be considered an effect. It is actually the opposite: The absence of `const` – let's call it `runtime` – is an effect. Pure functions can _in theory_ always be made const, whereas functions with side effects other than panics always require the runtime effect; they cannot be const.
 
 There is a nice symmetry between `runtime` and `async`: Both effects are "infectious", meaning an async function cannot be called from an synchronous function, just as a runtime function cannot be called from a const function. The other direction works: A synchronous function can be called from an async function with no problem. The same goes for const functions.
 
@@ -229,3 +229,5 @@ The main disadvantage is that this parameter has to be explicitly passed down fr
 [Effect.ts](https://effect.website/) is a new and popular framework enabling functional programming, including an effect system, in TypeScript. This demonstrates the growing demand for type and effect safety within the software engineering industry.
 
 Unfortunately, a fully general effect system like Koka's most likely cannot be added to Rust without major breaking changes. To me, the proposed keyword generics feel like a compromise rather than a [shiny future](https://github.com/rust-lang/rust-project-goals/blob/main/src/2024h2/const-traits.md#the-shiny-future-we-are-working-towards), but they are still a big improvement over the status quo.
+
+Discuss this blog post [on Reddit](https://www.reddit.com/r/rust/comments/1o2lvez/effects_in_rust_and_koka/).
