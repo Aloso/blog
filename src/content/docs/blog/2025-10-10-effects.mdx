@@ -62,7 +62,11 @@ fun safe-divide(x : int, y : int) : throw int
   else x / y
 ```
 
-What's going on here? We declare an effect `throw` that accepts a string and returns an arbitrary type `a` (in Rust, we would use the `!` type here). This effect is called in the `safe-divide` function, and becomes part of its type signature: `throw int` means that this function returns `int` and has the effect `throw`. When the function is called, the effect must be either handled, or propagated:
+What's going on here? We declare an effect `throw` that accepts a string and returns an arbitrary type `a` (in Rust, we would use the `!` type here). This effect is called in the `safe-divide` function, and becomes part of its type signature: `throw int` means that this function returns `int` and has the effect `throw`.
+
+The `ctl` keyword means that this is a _control flow effect_, meaning that it interrupts the execution (like an exception). Control flow effects can also resume the execution later.
+
+When `safe-divide` is called, the effect must be either handled, or propagated:
 
 ```koka
 fun propagate() : throw int
