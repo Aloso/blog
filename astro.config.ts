@@ -2,6 +2,9 @@ import { defineConfig, passthroughImageService } from 'astro/config'
 import starlight from '@astrojs/starlight'
 import starlightBlog from 'starlight-blog'
 import { koka } from './src/plugins/grammars/koka'
+import { rustExtended } from './src/plugins/grammars/rustExtended'
+
+import { remarkInlineHighlight } from './src/plugins/remarkInlineHighlight.js'
 
 function meta(attrs: Record<string, any>) {
   return { tag: 'meta', attrs } as const
@@ -28,6 +31,7 @@ export default defineConfig({
     service: passthroughImageService(),
   },
   markdown: {
+    remarkPlugins: [remarkInlineHighlight],
     syntaxHighlight: 'shiki',
   },
   integrations: [
@@ -61,7 +65,7 @@ export default defineConfig({
       expressiveCode: {
         themes: ['dark-plus', 'light-plus'],
         shiki: {
-          langs: [koka],
+          langs: [koka, rustExtended],
         },
       },
       components: {

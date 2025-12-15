@@ -1,0 +1,28 @@
+- Module system
+  - Like in JS, imports and re-exports should be separate: You can't re-export without importing
+  - Imports and re-exports don't need a visibility
+  - `::{self}` shouldn't make a difference
+  - `foo.rs` vs `foo/mod.rs` is cursed
+  - don't require module declarations in the parent module, write `pub mod;` (with docs) at the top
+- Enums
+  - variants/fields are public, unlike everything else
+  - Variants should be types
+- `macro_rules`
+  - Should use item scoping and allow a visibility modifier
+  - Parsing is awkward
+- Patterns
+  - `let` should be part of the binding, not the declaration construct
+  - no difference between `_ =` and `let _ =`
+  - lowercase constants can be confused with bindings
+  - `..` is a wildcard in a tuple or slice pattern, but `..n` is a half-open range
+- Operators
+  - Bitwise operators are rarely needed, could be removed
+  - `wrapping_*`, `saturating_*`, `strict_*`, `exact_*`, `overflowing_*`, `carrying_*`, `widening_*`, `borrowing_*`, `checked_*`, `unchecked_*` functions don't have operators
+- Effects
+  - `const fn` should be the default; non-const functions need an `io` effect or similar
+  - `async fn` should be an effect
+- General
+  - Regular structs should use parentheses: `struct Foo(x: i32, y: i32)`
+    - this also removes a syntactic ambiguity: `if a == X {} {}`
+  - `matches!` is a band aid -> need `is` operator
+  - multi-line strings don't strip indentation

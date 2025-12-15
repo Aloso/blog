@@ -1,0 +1,212 @@
+---
+title: Template strings in Rust
+date: 2025-12-15
+tags: [Language Design]
+---
+
+Template strings have become widespread in modern programming languages, but Rust is a notable exception. Here I want to shed light on the design space and rationale for template strings in Rust, and present a proposal.
+
+## Motivation
+
+Template strings allow interpolating values in a string. Some languages also support custom template strings for specialized use cases:
+
+{/* prettier-ignore */}
+```js
+// template string in JavaScript
+`Hello, ${person.name}!`
+
+// tagged template string
+sql`SELECT * FROM users WHERE id = ${handle} ORDER BY ${sortField};`
+// this is equivalent to...
+sql(
+    ["SELECT * FROM users WHERE id = ", " ORDER BY ", ";"],
+    handle, sortField
+)
+```
+
+String interpolation is supported in JavaScript, C#, Python, Swift, Ruby, Kotlin, Scala and Dart, among others. Java and C++ are working on proposals to add string interpolation as well.
+
+Strictly speaking, string interpolation isn't required, especially in a language with a powerful macro system. Rust uses `format_args!`#rs and related macros for string interpolation:
+
+```rsx
+println!("x is {x}");   // Display impl
+println!("x is {x:?}"); // Debug impl
+```
+
+But this approach has several disadvantages:
+
+- **Flexibility**: Rust doesn't allow arbitrary expressions in `format_args!`#rs, only single variables. We could allow more complex expressions here, but some things (e.g. nested string literals) would be difficult to support.
+
+- **Complexity**: The `format_args!`#rs macro has [many configuration options](https://doc.rust-lang.org/std/fmt/), making its bespoke syntax difficult to understand and remember. For example, here are some valid formatting arguments:
+
+  ```rs
+  "{:#?} {:04} {:e} {:p} {:width$} {:<5} {:+5} {1}
+  {:[fill]>5} {:x} {:b} {:+} {:.7} {:.prec$} {:.*}"
+  ```
+
+  These are all fairly simple, but you can also combine them (e.g. `"{: >#w$.2?}"`#rs), and you need to be careful to write the options in the right order: fill, alignment, sign, alternate flag, leading zero, width, precision, formatting trait.
+
+- **Syntax highlighting**: Editors like VS Code provide syntax highlighting by special-casing `format_args!`#rs, but most websites do not.
+
+- **Extensibility**: The built-in formatting options are powerful, but not extensible. For example, they don't allow locale-aware formatting.
+
+- **Availability**: The formatting machinery is not available in `no_std` environments, e.g. Rust for Linux.
+
+- **Performance**: `format_args!`#rs is not a zero-cost abstraction. The `ufmt` crate, for example, is faster and has a smaller binary size footprint.
+
+## Why _shouldn't_ we do this?
+
+The [RFC for implicit format args](https://rust-lang.github.io/rfcs/2795-format-args-implicit-identifiers.html#alternative-solution---interpolation) explains why it only allows single identifiers in format strings:
+
+> If any expressions beyond identifiers become accepted in format strings, then the RFC author expects that users will inevitably ask "why is my particular expression not accepted?". This could lead to feature creep, and before long perhaps the following might become valid Rust:
+>
+> ```rsx
+> println!("hello { if self.foo { &self.person } else { &self.other_person } }");
+> ```
+>
+> This no longer seems easily readable to the RFC author.
+
+This is the strongest argument against expressions in template strings. This sentiment is also expressed in the [most upvoted comment](https://internals.rust-lang.org/t/how-to-allow-arbitrary-expressions-in-format-strings/15812/8) in the IRLO thread about the topic. However, this argument is flawed: It is a **classic slippery slope fallacy**.
+
+:::note[The slippery slope argument]
+It goes like this: If we allow A, it could lead to B, which might lead to C, which might eventually lead to D. **D is bad**.
+
+The fallacy: If we allow A (simple expressions), we can still reject B, C, and D (complex, unreadable logic). The language team is not obliged to accept every feature request that follows an initial design change. But the slippery slope argument suggests that this is beyond our control.
+:::
+
+This line of reasoning does not refute the argument that an `if/else` in a string literal can be unreadable. But the argument has a more serious flaw: **It assumes that syntax must be chosen in a way that unreadable code becomes impossible**.
+
+Let's consider this position for a moment! Rust, like all powerful languages, already allows for code that is deeply confusing:
+
+```rs
+fn punch_card() -> impl std::fmt::Debug {
+    ..=..=.. ..    .. .. .. ..    .. .. .. ..    .. .. .. ..
+    ..=.. ..=..    .. .. .. ..    .. .. .. ..    .. ..=.. ..
+    ..=.. ..=..    ..=.. ..=..    .. ..=..=..    ..=..=..=..
+    ..=..=.. ..    ..=.. ..=..    ..=.. .. ..    .. ..=.. ..
+    ..=.. ..=..    ..=.. ..=..    .. ..=.. ..    .. ..=.. ..
+    ..=.. ..=..    ..=.. ..=..    .. .. ..=..    .. ..=.. ..
+    ..=.. ..=..    .. ..=..=..    ..=..=.. ..    .. ..=..=..
+}
+
+fn r#match() {
+    let val: () = match match match match match () {
+        () => ()
+    } {
+        () => ()
+    } {
+        () => ()
+    } {
+        () => ()
+    } {
+        () => ()
+    };
+    assert_eq!(val, ());
+}
+```
+
+If we posit that unreadable code should be impossible, then the above should be rejected by the compiler. We could do this by disallowing ranges within ranges, and `match` constructs in a `match` scrutinee. But adding exceptions like these makes the grammar more and more complicated. Furthermore, no matter how many things we make illegal, there will always be potential for unreadable code.
+
+Of course, the examples above are not real-world code, they are edge cases from the compiler's test suite. But producing unreadable code is much simpler: You can write functions with 10 or more arguments. You can write loops within loops within loops. You can use unintelligible variable names. Etc.
+
+The real solution is **code review**. In the TypeScript codebases where I have worked, with both experts and Junior devs, we have never had a problem with unreadable template strings.
+
+## The idea
+
+Since Rust already has prefixed literals (`b""`#rs, `r""`#rs, `c""`#rsx), it's intuitive to add another prefix, `f`:
+
+```rsx
+// old
+println!("{a} + {b} = {}", a + b);
+buf.write_fmt(format_args!("{a} + {b} = {}", a + b))?;
+
+// new
+println(f"{a} + {b} = {a + b}");
+buf.write_fmt(f"{a} + {b} = {a + b}")?;
+```
+
+This is possible since arbitrary string prefixes were [reserved in the 2021 edition](https://doc.rust-lang.org/edition-guide/rust-2021/reserved-syntax.html). Note that the `println!`#rs macro can be replaced with a `println()`#rs function, which accepts a single argument.
+
+Formatting options are important, but the syntax can be greatly simplified using extension traits:
+
+```rsx
+// old
+println!("{foo:width$.2}");
+// new
+println(f"{foo.width(width).precision(2)}");
+```
+
+Not only is this easier to understand, it is also naturally extensible:
+
+```rsx
+use textwrap::Indented;
+use owo_colors::OwoColorize;
+use num_format::{Locale, ToFormattedString};
+
+println!("{text.indented(4).red()}");
+println!("{number.to_formatted_string(&Locale::de)}");
+```
+
+The benefits of this approach are clear:
+
+- It is regular Rust syntax that works with IDE autocompletion, documentation tooltips, syntax highlighting, etc.
+- Rather than a symbol, it has a descriptive name that's easy to understand
+- It is a zero-cost abstraction: What you don't use, you don't pay for.
+- Formatting functions don't have to be implemented in the standard library, the can live in 3rd party crates.
+- Formatters can be easily combined.
+
+Only `{:?}` and `{:#?}` we should keep, because these options are used very often, and concise syntactic sugar is important for debugging.
+
+## A new approach
+
+It is tempting to just desugar `f"…"`#rsx to `format_args!("…")`#rs (which doesn't allocate a `String`#rs), but then template strings would inherit the complex formatting machinery, which we don't want. So let's go back to the drawing board. Here's what we need:
+
+1. A way to display text to the user, formatted in various ways
+2. A way to print values and data structures for debugging
+
+Today, these use cases are mostly handled by the `Display`#rs and `Debug`#rs traits. I expect that `Debug`#rs will continue to be used, and `{…:?}` and `{…:#?}` will be available in template strings. However, **compile-time reflection** (which is [a project goal for 2025](https://rust-lang.github.io/rust-project-goals/2025h2/reflection-and-comptime.html)) will hopefully make `#[derive(Debug)]`#rs obsolete, so debug printing Just Works™.
+
+### The `Pretty`#rs trait
+
+For user-facing formatting, I propose a new trait to supersede `Display`#rs:
+
+```rust
+trait Pretty {
+    fn fmt(&self, f: &mut core::pretty::Formatter) -> core::pretty::Result;
+}
+```
+
+The difference to `Display`#rs is that this `Formatter`#rs doesn't include any formatting options. It just provides the following methods:
+
+- `write(impl Pretty)`#rs
+- `writeln(impl Pretty)`#rs
+- `write_char(char)`#rs
+- `write_str(&str)`#rs
+- `write_display(impl Display)`#rs for interoperability
+
+Here is an example how `Pretty`#rs could be implemented for a type representing a parser warning:
+
+```rsx
+impl pretty::Pretty for ParseWarning {
+    fn fmt(&self, f: &mut pretty::Formatter<'_>) -> pretty::Result {
+        f.writeln(self.warning)?;
+        f.writeln(f"  at {self.file()}@{self.range()}")?;
+        if let Some(note) = &self.note {
+            f.writeln(f"  {"note".blue()}: {note.pretty()}")?;
+        }
+        Ok(())
+    }
+}
+```
+
+Because `write()`#rs and `writeln()`#rs accept any type implementing `Pretty`#rs, we can also give it a template string, which is more convenient than having to use the `write!`#rs macro.
+
+With a blanket `Display`#rs implementation for all `Pretty`#rs types, migration should be smooth. To ease migration, the old `std::fmt::Formatter`#rs can also get a `write_pretty` method.
+
+### Supporting `no_std`
+
+Making the `Pretty`#rs trait interoperable with `Display`#rs poses a problem: To make it work, the `core::pretty::Formatter`#rs also needs to use `&dyn std::fmt::Write`#rs under the hood, which is impossible while the latter is not in `core`. But it should be possible to move `std::fmt::Write`#rs to `core`, since it doesn't require allocation and the `Error`#rs type is just a unit struct. But that's the least fleshed-out part of this idea.
+
+---
+
+If you enjoy reading about language design, let me know. Discussion on Reddit.

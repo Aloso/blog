@@ -48,3 +48,15 @@
   text-align: center;
   margin-inline: auto;
 }
+
+code.shiki span {
+  color: var(--light);
+}
+
+:root[data-theme='dark'] code.shiki span {
+  color: var(--dark);
+}
+
+code.shiki {
+  font-variant-ligatures: no-contextual;
+}
